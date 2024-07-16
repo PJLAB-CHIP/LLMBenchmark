@@ -1,23 +1,23 @@
 Benchmark:
+  CUDA_VISIBLE_DEVICES: "4,5,6,7"
   model: &model "facebook/opt-13b"
   Hardware: 
     name: "a100-80gb"
     peak_power: NULL
     average_power: NULL
-  device: "cuda"
   prompt_size: [128, 256, 512, 1024]
-  batch_size: [1,2,4,16,32]
+  batch_size: [1, 2, 4, 16, 32]
   token_size: [128, 256, 512, 1024]
-  data_parallel: &dp 1
   result_path: "./results/opt-13b.csv"
+  device: &device "cuda"  
 
 Model:
   pretrained_model_name_or_path: *model
   cache_dir: "/root/model_hub/"
   torch_dtype: "float16"
-  device_map: NULL
+  device: *device
+  device_map: "auto"
   trust_remote_code: true
-  data_parallel: *dp
 
 Tokenizer:
   pretrained_model_name_or_path: *model

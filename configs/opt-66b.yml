@@ -1,6 +1,6 @@
 Benchmark:
-  CUDA_VISIBLE_DEVICES: "7"
-  model: &model "meta-llama/llama-2-7b-hf"
+  CUDA_VISIBLE_DEVICES: "0,1,2,3"
+  model: &model "facebook/opt-66b"
   Hardware: 
     name: "a100-80gb"
     peak_power: NULL
@@ -8,7 +8,7 @@ Benchmark:
   prompt_size: [128, 256, 512, 1024]
   batch_size: [1,2,4,16,32]
   token_size: [128, 256, 512, 1024]
-  result_path: "./results/llama-7b-hf.csv"
+  result_path: "./results/opt-66b.csv"
   device: &device "cuda"  
 
 Model:

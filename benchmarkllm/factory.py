@@ -30,7 +30,10 @@ def build_torch_dtype(type_str: str) -> torch.dtype:
     }
     return TorchDTypeMapper[type_str]
 
-def build_llm_model_and_tokenizer(model_cfgs: dict | edict, tokenizer_cfgs: dict | edict):
+
+def build_llm_model_and_tokenizer(
+    model_cfgs: dict | edict, tokenizer_cfgs: dict | edict
+):
     model_cfgs = edict(model_cfgs)
     tokenizer_cfgs = edict(tokenizer_cfgs)
 
@@ -40,8 +43,10 @@ def build_llm_model_and_tokenizer(model_cfgs: dict | edict, tokenizer_cfgs: dict
         torch_dtype=build_torch_dtype(model_cfgs.torch_dtype),
         trust_remote_code=model_cfgs.trust_remote_code,
         device_map=model_cfgs.device_map,
-        
     )
+
+    if model_cfgs.device_map is None:
+        model = model.to(model_cfgs.device)
 
     tokenizer = AutoTokenizer.from_pretrained(
         pretrained_model_name_or_path=tokenizer_cfgs.pretrained_model_name_or_path,

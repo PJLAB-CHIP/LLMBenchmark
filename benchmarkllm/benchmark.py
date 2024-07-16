@@ -2,10 +2,11 @@ from argparse import ArgumentParser
 from ruamel.yaml import YAML
 import time
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, Cache
+from transformers import AutoTokenizer
 from easydict import EasyDict as edict
 from pandas import DataFrame as df
 import sys
+import os
 
 
 from benchmarkllm.factory import build_llm_model_and_tokenizer
@@ -23,6 +24,7 @@ RESULT = df(
         "prompt_time",
         "token_time",
         "e2e_time",
+        "tensor_parallel",
     ]
 )
 
@@ -61,25 +63,14 @@ def measure_inference_times(model, input_ids, token_size, device):
 
 def main(cfgs: dict | edict):
     cfgs = edict(cfgs)
-    # Get device ids.
+
+    # Set $CUDA_VISIBLE_DEVICES
+    os.environ["CUDA_VISIBLE_DEVICES"] = cfgs.Benchmark.CUDA_VISIBLE_DEVICES
+
     device = torch.device(cfgs.Benchmark.device)
 
     # Build model.
     model, tokenizer = build_llm_model_and_tokenizer(cfgs.Model, cfgs.Tokenizer)
-
-    # Parallel model.
-    data_parallel = cfgs.Model.data_parallel
-    if isinstance(data_parallel, int) and data_parallel > 1:
-        assert data_parallel <= torch.cuda.device_count()
-        model = torch.nn.DataParallel(model)
-    model = model.to(device)
-
-    # Build tokenizer.
-    tokenizer = AutoTokenizer.from_pretrained(
-        pretrained_model_name_or_path=cfgs.Tokenizer.pretrained_model_name_or_path,
-        cache_dir=cfgs.Tokenizer.cache_dir,
-        trust_remote_code=cfgs.Tokenizer.trust_remote_code,
-    )
 
     batch_size = list(cfgs.Benchmark.batch_size)
     prompt_size = list(cfgs.Benchmark.prompt_size)
@@ -114,6 +105,7 @@ def main(cfgs: dict | edict):
                     prompt_time,  # Prompt time
                     avg_token_time,  # Token time
                     e2e_time,  # E2E time
+                    torch.cuda.device_count(),  # Tensor parallel
                 ]
                 # Print result of current iteration.
                 print(
