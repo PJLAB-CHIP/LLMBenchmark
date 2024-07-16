@@ -1,0 +1,25 @@
+Benchmark:
+  model: &model "meta-llama/llama-2-7b-hf"
+  Hardware: 
+    name: "a100-80gb"
+    peak_power: NULL
+    average_power: NULL
+  device: "cuda"
+  prompt_size: [128, 256, 512, 1024]
+  batch_size: [1,2,4,16,32]
+  token_size: [128, 256, 512, 1024]
+  data_parallel: &dp 1
+  result_path: "./results/llama-7b-hf.csv"
+
+Model:
+  pretrained_model_name_or_path: *model
+  cache_dir: "/root/model_hub/"
+  torch_dtype: "float16"
+  device_map: NULL
+  trust_remote_code: true
+  data_parallel: *dp
+
+Tokenizer:
+  pretrained_model_name_or_path: *model
+  cache_dir: "/root/model_hub/"
+  trust_remote_code: true
