@@ -24,10 +24,11 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "torch",
+    "torch>=2.0",
+    "torchaudio",
     "torchvision",
+    "transformers>=4.42",
     "modelscope",
-    "transformers",
     "addict",
     "accelerate",
     "easydict",
