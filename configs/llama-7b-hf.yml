@@ -1,25 +1,22 @@
 Benchmark:
-  CUDA_VISIBLE_DEVICES: "7"
-  model: &model "meta-llama/llama-2-7b-hf"
-  Hardware: 
-    name: "a100-80gb"
-    peak_power: NULL
-    average_power: NULL
-  prompt_size: [128, 256, 512, 1024]
-  batch_size: [1,2,4,16,32]
-  token_size: [128, 256, 512, 1024]
+  CUDA_VISIBLE_DEVICES: "0"
+  model: &_model "meta-llama/llama-2-7b-hf"
+  hardware_name: "A100-SXM4-80GB"
+  prompt_size: [128, 256, 512]
+  batch_size: [1, 2, 4, 16, 32]
+  token_size: [128, 256, 512]
   result_path: "./results/llama-7b-hf.csv"
-  device: &device "cuda"  
+  device: &_device "cuda"  
 
 Model:
-  pretrained_model_name_or_path: *model
+  pretrained_model_name_or_path: *_model
   cache_dir: "/root/model_hub/"
   torch_dtype: "float16"
-  device: *device
+  device: *_device
   device_map: "auto"
   trust_remote_code: true
 
 Tokenizer:
-  pretrained_model_name_or_path: *model
+  pretrained_model_name_or_path: *_model
   cache_dir: "/root/model_hub/"
   trust_remote_code: true

@@ -9,8 +9,8 @@ import sys
 import os
 
 
-from benchmarkllm.factory import build_llm_model_and_tokenizer
-from benchmarkllm.gen_input_token import gen_random_input_token
+from llmbenchmark.factory import build_llm_model_and_tokenizer
+from llmbenchmark.gen_input_token import gen_random_input_token
 
 RESULT = df(
     columns=[
@@ -19,8 +19,6 @@ RESULT = df(
         "prompt_size",
         "batch_size",
         "token_size",
-        "peak_power",
-        "average_power",
         "prompt_time",
         "token_time",
         "e2e_time",
@@ -64,8 +62,12 @@ def measure_inference_times(model, input_ids, token_size, device):
 def main(cfgs: dict | edict):
     cfgs = edict(cfgs)
 
-    # Set $CUDA_VISIBLE_DEVICES
+    # Set $CUDA_VISIBLE_DEVICES.
     os.environ["CUDA_VISIBLE_DEVICES"] = cfgs.Benchmark.CUDA_VISIBLE_DEVICES
+    
+    # Create result dir.
+    if not os.path.exists(os.path.dirname(cfgs.Benchmark.result_path)):
+        os.makedirs(os.path.dirname(cfgs.Benchmark.result_path))
 
     device = torch.device(cfgs.Benchmark.device)
 
@@ -83,40 +85,46 @@ def main(cfgs: dict | edict):
 
     i = 1
     n_iters = len(batch_size) * len(prompt_size) * len(token_size)
-    for bs in batch_size:
-        for ps in prompt_size:
-            for ts in token_size:
-                # Generate random input tokens.
-                input_ids = gen_random_input_token(bs, ps, vocab_size)
-                # Measure inference times.
-                prompt_time, avg_token_time = measure_inference_times(
-                    model, input_ids, ts, device
-                )
-                e2e_time = prompt_time + avg_token_time * (ts - 1)
-                # Save results.
-                RESULT.loc[len(RESULT)] = [
-                    cfgs.Model.pretrained_model_name_or_path,  # Model
-                    cfgs.Benchmark.Hardware.name,  # Hardware Name
-                    ps,  # Prompt size
-                    bs,  # Batch size
-                    ts,  # Token size
-                    cfgs.Benchmark.Hardware.peak_power,  # Peak power
-                    cfgs.Benchmark.Hardware.average_power,  # Average power
-                    prompt_time,  # Prompt time
-                    avg_token_time,  # Token time
-                    e2e_time,  # E2E time
-                    torch.cuda.device_count(),  # Tensor parallel
-                ]
-                # Print result of current iteration.
-                print(
-                    f"{i}/{n_iters}: "
-                    f"{RESULT.tail(1).to_string(index=False, header=False)}"
-                )
-                sys.stdout.flush()
-                i = i + 1
 
-    # Save results to a csv file.
-    RESULT.to_csv(cfgs.Benchmark.result_path, mode="a", header=False, index=False)
+    try:
+        for bs in batch_size:
+            for ps in prompt_size:
+                for ts in token_size:
+                    # Generate random input tokens.
+                    input_ids = gen_random_input_token(bs, ps, vocab_size)
+                    # Measure inference times.
+                    prompt_time, avg_token_time = measure_inference_times(
+                        model, input_ids, ts, device
+                    )
+                    e2e_time = prompt_time + avg_token_time * (ts - 1)
+                    # Save results.
+                    RESULT.loc[len(RESULT)] = [
+                        cfgs.Model.pretrained_model_name_or_path,  # Model
+                        cfgs.Benchmark.hardware_name,  # Hardware Name
+                        ps,  # Prompt size
+                        bs,  # Batch size
+                        ts,  # Token size
+                        prompt_time,  # Prompt time
+                        avg_token_time,  # Token time
+                        e2e_time,  # E2E time
+                        torch.cuda.device_count(),  # Tensor parallel
+                    ]
+                    # Print result of current iteration.
+                    print(
+                        f"{i}/{n_iters}: "
+                        f"{RESULT.tail(1).to_string(index=False, header=False)}"
+                    )
+                    sys.stdout.flush()
+                    i = i + 1
+    except Exception as e:
+        print(f"[LLMBenchmark] Fatal Error: {e}")
+
+    # Create a new file with header if there not existing.
+    if not os.path.exists(cfgs.Benchmark.result_path):
+        RESULT.to_csv(cfgs.Benchmark.result_path, index=False)
+    # Otherwise append to the existing file.
+    else:
+        RESULT.to_csv(cfgs.Benchmark.result_path, mode="a", header=False, index=False)
 
 
 if __name__ == "__main__":

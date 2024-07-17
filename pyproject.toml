@@ -3,9 +3,9 @@ requires = ["setuptools>=40.8.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "BenchmarkLLM"
+name = "llmbenchmark"
 version = "0.1.0"
-description = "Benchmark LLM"
+description = "LLM Benchmark Tool"
 authors = [{ name = "jamesnulliu", email = "jamesnulliu@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.10, <3.13"
@@ -37,5 +37,5 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["benchmarkllm"]
+packages = ["llmbenchmark"]
 package-dir = { "" = "." }
