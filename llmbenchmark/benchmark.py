@@ -9,7 +9,6 @@ import sys
 import os
 import itertools
 
-
 from llmbenchmark.factory import build_llm_model_and_tokenizer
 from llmbenchmark.gen_input_token import gen_random_input_token
 
@@ -31,13 +30,14 @@ RESULT = df(
 
 
 @torch.inference_mode()
-def measure_inference_times(model, input_ids, token_size, device, vocab_size):
+def measure_inference_times(model, input_ids, token_size, device):
     # Move inputs to device
     input_ids = input_ids.to(device)  # Shape: (batch_size, prompt_size)
 
     # Measure prompt time
     start_time = time.time()
     outputs = model(input_ids)
+    torch.cuda.synchronize()
     prompt_time = time.time() - start_time
 
     # Prepare for next token generation
@@ -49,6 +49,7 @@ def measure_inference_times(model, input_ids, token_size, device, vocab_size):
     for _ in range(token_size - 1):
         start_time = time.time()
         outputs = model(next_token, past_key_values=past_key_values)
+        torch.cuda.synchronize()
         token_time = time.time() - start_time
         token_times.append(token_time)
 
@@ -57,6 +58,7 @@ def measure_inference_times(model, input_ids, token_size, device, vocab_size):
         next_token = outputs.logits.argmax(dim=-1)
         # next_token = torch.clamp(next_token, 0, vocab_size - 1)
 
+    torch.cuda.synchronize()
     avg_token_time = sum(token_times) / len(token_times)
 
     return prompt_time * 1e3, avg_token_time * 1e3  # ms
@@ -83,7 +85,7 @@ def main(cfgs: dict | edict):
     prev_ps, prev_bs = 0, 0
     try:
         for test_params in cfgs.Benchmark.TestSet:
-            print(f"[LLMBenchmark]: Test Params: {test_params}")
+            print(f"[LLMBenchmark] Test Params: {test_params}")
             prompt_size = list(test_params.prompt_size)
             batch_size = list(test_params.batch_size)
             token_size = list(test_params.token_size)
@@ -97,15 +99,16 @@ def main(cfgs: dict | edict):
                 # Warm up the model.
                 if prev_ps != ps or prev_bs != bs:
                     print(
-                        f"[LLMBenchmark] Warming up the model for "
-                        f"prompt size: {ps}, batch size: {bs}, token size: {ts}..."
+                        f"[LLMBenchmark] Warming up for "
+                        f"prompt size: {ps}, batch size: {bs}, token size: {ts} ...",
+                        end=" ",
                     )
-                    measure_inference_times(model, input_ids, ts, device, vocab_size)
-                    print(f"[LLMBenchmark] Warming up finished.")
+                    for _ in range(int(cfgs.Benchmark.n_warm_up)):
+                        measure_inference_times(model, input_ids, 128, device)
+                    print(f"Finished.")
                 prev_ps, prev_bs = ps, bs
-                # Measure inference times.
                 prompt_time, avg_token_time = measure_inference_times(
-                    model, input_ids, ts, device, vocab_size
+                    model, input_ids, ts, device
                 )
                 e2e_time = prompt_time + avg_token_time * (ts - 1)
                 # Save results.
@@ -122,7 +125,7 @@ def main(cfgs: dict | edict):
                 ]
                 # Print result of current iteration.
                 print(
-                    f"{i+1}/{n_iters}: "
+                    f"[LLMBenchmark] {i+1}/{n_iters}: "
                     f"{RESULT.tail(1).to_string(index=False, header=False)}"
                 )
                 sys.stdout.flush()

@@ -40,6 +40,7 @@ def build_llm_model(model_cfgs: dict | edict):
 
     model = None
     if model_cfgs.Options.load_weights:
+        model_cfgs.Params.torch_dtype = build_torch_dtype(model_cfgs.Params.torch_dtype)
         model = AutoModelForCausalLM.from_pretrained(**model_cfgs.Params)
     else:
         raise NotImplementedError("Not loading weights is not supported yet.")
