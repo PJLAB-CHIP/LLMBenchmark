@@ -13,6 +13,8 @@ import itertools
 from llmbenchmark.factory import build_llm_model_and_tokenizer
 from llmbenchmark.gen_input_token import gen_random_input_token
 
+torch.backends.cudnn.benchmark = True
+
 RESULT = df(
     columns=[
         "model",
@@ -28,14 +30,14 @@ RESULT = df(
 )
 
 
+@torch.inference_mode()
 def measure_inference_times(model, input_ids, token_size, device, vocab_size):
     # Move inputs to device
     input_ids = input_ids.to(device)  # Shape: (batch_size, prompt_size)
 
     # Measure prompt time
     start_time = time.time()
-    with torch.no_grad():
-        outputs = model(input_ids)
+    outputs = model(input_ids)
     prompt_time = time.time() - start_time
 
     # Prepare for next token generation
@@ -46,8 +48,7 @@ def measure_inference_times(model, input_ids, token_size, device, vocab_size):
     token_times = []
     for _ in range(token_size - 1):
         start_time = time.time()
-        with torch.no_grad():
-            outputs = model(next_token, past_key_values=past_key_values)
+        outputs = model(next_token, past_key_values=past_key_values)
         token_time = time.time() - start_time
         token_times.append(token_time)
 
