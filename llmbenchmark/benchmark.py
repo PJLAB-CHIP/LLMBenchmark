@@ -7,6 +7,7 @@ from easydict import EasyDict as edict
 from pandas import DataFrame as df
 import sys
 import os
+import itertools
 
 
 from llmbenchmark.factory import build_llm_model_and_tokenizer
@@ -27,7 +28,7 @@ RESULT = df(
 )
 
 
-def measure_inference_times(model, input_ids, token_size, device):
+def measure_inference_times(model, input_ids, token_size, device, vocab_size):
     # Move inputs to device
     input_ids = input_ids.to(device)  # Shape: (batch_size, prompt_size)
 
@@ -53,6 +54,7 @@ def measure_inference_times(model, input_ids, token_size, device):
         # Update next token and past_key_values for the next iteration
         past_key_values = outputs.past_key_values
         next_token = outputs.logits.argmax(dim=-1)
+        # next_token = torch.clamp(next_token, 0, vocab_size - 1)
 
     avg_token_time = sum(token_times) / len(token_times)
 
@@ -64,7 +66,8 @@ def main(cfgs: dict | edict):
 
     # Set $CUDA_VISIBLE_DEVICES.
     os.environ["CUDA_VISIBLE_DEVICES"] = cfgs.Benchmark.CUDA_VISIBLE_DEVICES
-    
+    print(f"[LLMBenchmark] CUDA_VISIBLE_DEVICES: {cfgs.Benchmark.CUDA_VISIBLE_DEVICES}")
+
     # Create result dir.
     if not os.path.exists(os.path.dirname(cfgs.Benchmark.result_path)):
         os.makedirs(os.path.dirname(cfgs.Benchmark.result_path))
@@ -74,48 +77,55 @@ def main(cfgs: dict | edict):
     # Build model.
     model, tokenizer = build_llm_model_and_tokenizer(cfgs.Model, cfgs.Tokenizer)
 
-    batch_size = list(cfgs.Benchmark.batch_size)
-    prompt_size = list(cfgs.Benchmark.prompt_size)
-    token_size = list(cfgs.Benchmark.token_size)
     vocab_size = tokenizer.vocab_size
 
-    # Heat up the model.
-    input_ids = gen_random_input_token(1, 128, vocab_size)
-    _, _ = measure_inference_times(model, input_ids, 128, device)
-
-    i = 1
-    n_iters = len(batch_size) * len(prompt_size) * len(token_size)
-
+    prev_ps, prev_bs = 0, 0
     try:
-        for bs in batch_size:
-            for ps in prompt_size:
-                for ts in token_size:
-                    # Generate random input tokens.
-                    input_ids = gen_random_input_token(bs, ps, vocab_size)
-                    # Measure inference times.
-                    prompt_time, avg_token_time = measure_inference_times(
-                        model, input_ids, ts, device
-                    )
-                    e2e_time = prompt_time + avg_token_time * (ts - 1)
-                    # Save results.
-                    RESULT.loc[len(RESULT)] = [
-                        cfgs.Model.pretrained_model_name_or_path,  # Model
-                        cfgs.Benchmark.hardware_name,  # Hardware Name
-                        ps,  # Prompt size
-                        bs,  # Batch size
-                        ts,  # Token size
-                        prompt_time,  # Prompt time
-                        avg_token_time,  # Token time
-                        e2e_time,  # E2E time
-                        torch.cuda.device_count(),  # Tensor parallel
-                    ]
-                    # Print result of current iteration.
+        for test_params in cfgs.Benchmark.TestSet:
+            print(f"[LLMBenchmark]: Test Params: {test_params}")
+            prompt_size = list(test_params.prompt_size)
+            batch_size = list(test_params.batch_size)
+            token_size = list(test_params.token_size)
+            n_iters = len(batch_size) * len(prompt_size) * len(token_size)
+
+            param_combinations = itertools.product(prompt_size, batch_size, token_size)
+
+            for i, (ps, bs, ts) in enumerate(param_combinations):
+                # Generate random input tokens.
+                input_ids = gen_random_input_token(bs, ps, vocab_size)
+                # Warm up the model.
+                if prev_ps != ps or prev_bs != bs:
                     print(
-                        f"{i}/{n_iters}: "
-                        f"{RESULT.tail(1).to_string(index=False, header=False)}"
+                        f"[LLMBenchmark] Warming up the model for "
+                        f"prompt size: {ps}, batch size: {bs}, token size: {ts}..."
                     )
-                    sys.stdout.flush()
-                    i = i + 1
+                    measure_inference_times(model, input_ids, ts, device, vocab_size)
+                    print(f"[LLMBenchmark] Warming up finished.")
+                prev_ps, prev_bs = ps, bs
+                # Measure inference times.
+                prompt_time, avg_token_time = measure_inference_times(
+                    model, input_ids, ts, device, vocab_size
+                )
+                e2e_time = prompt_time + avg_token_time * (ts - 1)
+                # Save results.
+                RESULT.loc[len(RESULT)] = [
+                    cfgs.Model.Params.pretrained_model_name_or_path,  # Model
+                    cfgs.Benchmark.hardware_name,  # Hardware Name
+                    ps,  # Prompt size
+                    bs,  # Batch size
+                    ts,  # Token size
+                    prompt_time,  # Prompt time
+                    avg_token_time,  # Token time
+                    e2e_time,  # E2E time
+                    torch.cuda.device_count(),  # Tensor parallel
+                ]
+                # Print result of current iteration.
+                print(
+                    f"{i+1}/{n_iters}: "
+                    f"{RESULT.tail(1).to_string(index=False, header=False)}"
+                )
+                sys.stdout.flush()
+                i = i + 1
     except Exception as e:
         print(f"[LLMBenchmark] Fatal Error: {e}")
 
